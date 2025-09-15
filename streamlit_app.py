@@ -153,12 +153,16 @@ def retirement_spending_calculator(
     if max(success_rates) < SUCCESS_LOWER:
         lower_annual_net = base_annual_net = upper_annual_net = 0
         legacy = 0
+        portfolio_withdrawals = [0] * ret_years
     else:
         interp_func = interp1d(success_rates, trial_spendings, bounds_error=False, fill_value=(0, trial_spendings[-1]))
         lower_annual_net = interp_func(SUCCESS_LOWER)
         base_annual_net = interp_func(SUCCESS_BASE)
         upper_annual_net = interp_func(SUCCESS_UPPER)
         _, legacy = success_rate_for_spending(base_annual_net)
+        
+        # Calculate portfolio withdrawals for the base case spending level
+        portfolio_withdrawals = get_withdrawals(base_annual_net) if base_annual_net > 0 else [0] * ret_years
 
     return {
         'viable_spending_monthly': {
@@ -188,7 +192,8 @@ def retirement_spending_calculator(
         'ss_series': ss_series,
         'pension_series': pension_series,
         'ltc_needs': ltc_needs,
-        'other_series': other_series
+        'other_series': other_series,
+        'portfolio_withdrawals': portfolio_withdrawals
     }
 
 def main():
@@ -415,6 +420,7 @@ def main():
                     'Social Security': results['ss_series'],
                     'Pension': results['pension_series'],
                     'Other Income': results['other_series'],
+                    'Portfolio Withdrawals': results['portfolio_withdrawals'],
                     'LTC Needs': results['ltc_needs']
                 })
 
@@ -442,6 +448,14 @@ def main():
                     y=chart_data['Other Income'],
                     name='Other Income',
                     line=dict(color='lightyellow'),
+                    stackgroup='income'
+                ))
+
+                fig_income.add_trace(go.Scatter(
+                    x=chart_data['Age'],
+                    y=chart_data['Portfolio Withdrawals'],
+                    name='Portfolio Withdrawals',
+                    line=dict(color='lightcoral'),
                     stackgroup='income'
                 ))
 
