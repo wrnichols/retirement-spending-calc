@@ -178,18 +178,29 @@ def retirement_spending_calculator(
         inflated_spending = base_spending * np.prod(1 + np.array(inflation_factors[years_to_ret:years_to_ret + k]))
         annual_spending_needs.append(inflated_spending)
     
-    # Calculate remaining portfolio balance over time
+    # Calculate remaining portfolio balance and adjust withdrawals for reality
     portfolio_balance_over_time = []
+    actual_portfolio_withdrawals = []
     balance = assets_ret
+    
     for year in range(ret_years):
         # Apply investment return (using mean return for projection)
         balance *= (1 + POST_RET_RETURN_MEAN)
-        # Subtract withdrawal
-        if year < len(portfolio_withdrawals):
-            balance -= portfolio_withdrawals[year]
-        # Ensure balance doesn't go negative
-        balance = max(0, balance)
+        
+        # Calculate actual withdrawal (limited by available balance)
+        intended_withdrawal = portfolio_withdrawals[year] if year < len(portfolio_withdrawals) else 0
+        actual_withdrawal = min(intended_withdrawal, balance) if balance > 0 else 0
+        
+        # Subtract actual withdrawal
+        balance -= actual_withdrawal
+        balance = max(0, balance)  # Ensure balance doesn't go negative
+        
+        # Store results
         portfolio_balance_over_time.append(balance)
+        actual_portfolio_withdrawals.append(actual_withdrawal)
+    
+    # Replace the unrealistic withdrawals with actual possible withdrawals
+    portfolio_withdrawals = actual_portfolio_withdrawals
 
     return {
         'viable_spending_monthly': {
