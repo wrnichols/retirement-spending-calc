@@ -5,6 +5,16 @@ import plotly.graph_objects as go
 import plotly.express as px
 from scipy.stats import norm
 from scipy.interpolate import interp1d
+import locale
+
+# Set US locale for number formatting
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, 'en_US')
+    except:
+        pass  # Use default if US locale not available
 
 # Assumptions (2025 data, retained)
 PRE_RET_RETURN = {'Conservative': 0.04, 'Moderate': 0.055, 'Aggressive': 0.07, 'Very Aggressive': 0.085}
@@ -154,21 +164,19 @@ def retirement_spending_calculator(
     # If Monte Carlo is being too pessimistic (max success < 50%), use deterministic approach
     max_success = max(success_rates) if success_rates else 0
     if max_success < 0.5:
-        # Use simplified sustainable withdrawal calculations
-        avg_ss = np.mean(ss_series) if ss_series else 0
-        avg_pension = np.mean(pension_series) if pension_series else 0
-        avg_other = np.mean(other_series) if other_series else 0
-        avg_ltc_need = np.mean(ltc_needs) if ltc_needs else 0
+        # Use simplified sustainable withdrawal calculations with direct SS amount
+        # Use the SS annual amount directly instead of complex series average
+        simple_ss_annual = ss_annual if 'ss_annual' in locals() else ss_fra  # Use FRA amount
         
         # Conservative sustainable withdrawal rate: 3.5-4.5%
         conservative_withdrawal = assets_ret * 0.035  # 3.5%
         moderate_withdrawal = assets_ret * 0.04       # 4.0% 
         optimistic_withdrawal = assets_ret * 0.045    # 4.5%
         
-        # Add other income sources
-        total_conservative = conservative_withdrawal + avg_ss + avg_pension + avg_other - avg_ltc_need
-        total_moderate = moderate_withdrawal + avg_ss + avg_pension + avg_other - avg_ltc_need
-        total_optimistic = optimistic_withdrawal + avg_ss + avg_pension + avg_other - avg_ltc_need
+        # Add Social Security (simplified - no complex averaging)
+        total_conservative = conservative_withdrawal + simple_ss_annual
+        total_moderate = moderate_withdrawal + simple_ss_annual
+        total_optimistic = optimistic_withdrawal + simple_ss_annual
         
         lower_annual_net = max(0, total_conservative)
         base_annual_net = max(0, total_moderate)
