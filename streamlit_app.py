@@ -268,7 +268,7 @@ def main():
         </script>
     """, unsafe_allow_html=True)
 
-    st.title("💸 Retirement Spending Calculator Dashboard")
+    st.title("💸 Retirement Spending Calculator Dashboard v2.0")
     st.markdown("### Calculate your sustainable retirement spending based on current assets")
     st.markdown("---")
 
