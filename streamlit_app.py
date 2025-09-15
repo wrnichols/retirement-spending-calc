@@ -154,7 +154,7 @@ def retirement_spending_calculator(
     # Desired spending check
     desired_annual_net = desired_monthly_spending * 12
     desired_success, _ = success_rate_for_spending(desired_annual_net)
-    desired_is_realistic = desired_success >= SUCCESS_UPPER  # 90% threshold
+    desired_is_realistic = desired_success >= SUCCESS_UPPER  # 65% threshold
     desired_status = "unrealistic with near-certainty" if not desired_is_realistic else "realistic"
     
     # Trial spendings
@@ -352,23 +352,23 @@ def main():
 
             with col1:
                 st.metric(
-                    "Ultra-Conservative (99% Success)",
+                    "Ultra-Conservative (85% Success)",
                     f"${results['viable_spending_monthly']['lower_bound_99_percent']:,.0f}",
-                    help="Monthly spending with 99% probability of success"
+                    help="Monthly spending with 85% probability of success"
                 )
 
             with col2:
                 st.metric(
-                    "Conservative (95% Success)",
+                    "Conservative (75% Success)",
                     f"${results['viable_spending_monthly']['base_95_percent']:,.0f}",
-                    help="Recommended monthly spending with 95% success probability"
+                    help="Recommended monthly spending with 75% success probability"
                 )
 
             with col3:
                 st.metric(
-                    "Moderate (90% Success)",
+                    "Moderate (65% Success)",
                     f"${results['viable_spending_monthly']['upper_bound_90_percent']:,.0f}",
-                    help="Higher spending with 90% success probability"
+                    help="Higher spending with 65% success probability"
                 )
 
             with col4:
@@ -461,16 +461,17 @@ def main():
                 mode='lines+markers',
                 name='Success Probability',
                 line=dict(color='green', width=3),
-                marker=dict(size=6)
+                marker=dict(size=6),
+                hovertemplate='<b>Annual Spending:</b> $%{x:,.0f}<br><b>Success Rate:</b> %{y:.1f}%<extra></extra>'
             ))
 
             # Add reference lines
-            fig_prob.add_hline(y=95, line_dash="dash", line_color="red",
-                              annotation_text="95% Conservative")
-            fig_prob.add_hline(y=90, line_dash="dash", line_color="orange",
-                              annotation_text="90% Base Case")
-            fig_prob.add_hline(y=80, line_dash="dash", line_color="yellow",
-                              annotation_text="80% Optimistic")
+            fig_prob.add_hline(y=85, line_dash="dash", line_color="red",
+                              annotation_text="85% Ultra-Conservative")
+            fig_prob.add_hline(y=75, line_dash="dash", line_color="orange",
+                              annotation_text="75% Conservative")
+            fig_prob.add_hline(y=65, line_dash="dash", line_color="yellow",
+                              annotation_text="65% Moderate")
 
             fig_prob.add_vline(x=results['base_monthly_spending'] * 12, line_dash="dot",
                               line_color="blue", annotation_text="Base Annual Spending")
