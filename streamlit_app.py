@@ -163,6 +163,13 @@ def retirement_spending_calculator(
         
         # Calculate portfolio withdrawals for the base case spending level
         portfolio_withdrawals = get_withdrawals(base_annual_net) if base_annual_net > 0 else [0] * ret_years
+    
+    # ALWAYS calculate portfolio withdrawals for desired spending to show what would be needed
+    desired_portfolio_withdrawals = get_withdrawals(desired_annual_net)
+    
+    # Use desired withdrawals if no viable spending was found (more informative)
+    if all(w == 0 for w in portfolio_withdrawals):
+        portfolio_withdrawals = desired_portfolio_withdrawals
 
     return {
         'viable_spending_monthly': {
