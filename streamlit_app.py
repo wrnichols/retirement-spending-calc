@@ -170,6 +170,13 @@ def retirement_spending_calculator(
     # Use desired withdrawals if no viable spending was found (more informative)
     if all(w == 0 for w in portfolio_withdrawals):
         portfolio_withdrawals = desired_portfolio_withdrawals
+    
+    # Calculate annual spending needs over time (inflated)
+    annual_spending_needs = []
+    base_spending = max(desired_annual_net, base_annual_net * 12 if base_annual_net > 0 else desired_annual_net)
+    for k in range(1, ret_years + 1):
+        inflated_spending = base_spending * np.prod(1 + np.array(inflation_factors[years_to_ret:years_to_ret + k]))
+        annual_spending_needs.append(inflated_spending)
 
     return {
         'viable_spending_monthly': {
@@ -200,7 +207,8 @@ def retirement_spending_calculator(
         'pension_series': pension_series,
         'ltc_needs': ltc_needs,
         'other_series': other_series,
-        'portfolio_withdrawals': portfolio_withdrawals
+        'portfolio_withdrawals': portfolio_withdrawals,
+        'annual_spending_needs': annual_spending_needs
     }
 
 def main():
@@ -428,6 +436,7 @@ def main():
                     'Pension': results['pension_series'],
                     'Other Income': results['other_series'],
                     'Portfolio Withdrawals': results['portfolio_withdrawals'],
+                    'Annual Spending Needs': results['annual_spending_needs'],
                     'LTC Needs': results['ltc_needs']
                 })
 
@@ -466,6 +475,15 @@ def main():
                     stackgroup='income'
                 ))
 
+                # Add Annual Spending Needs as reference line
+                fig_income.add_trace(go.Scatter(
+                    x=chart_data['Age'],
+                    y=chart_data['Annual Spending Needs'],
+                    name='Annual Spending Needs',
+                    mode='lines',
+                    line=dict(color='darkblue', width=3, dash='dot')
+                ))
+
                 # Add LTC needs as separate line
                 fig_income.add_trace(go.Scatter(
                     x=chart_data['Age'],
@@ -476,7 +494,7 @@ def main():
                 ))
 
                 fig_income.update_layout(
-                    title="Projected Income Sources and LTC Needs",
+                    title="Retirement Cash Flow Analysis: Income Sources vs. Spending Needs",
                     xaxis_title="Age",
                     yaxis_title="Annual Amount ($)",
                     hovermode='x unified',
