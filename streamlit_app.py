@@ -6,20 +6,20 @@ import plotly.express as px
 from scipy.stats import norm
 from scipy.interpolate import interp1d
 
-# Assumptions (customizable; updated for 2025 data)
+# Assumptions (2025 data, retained)
 PRE_RET_RETURN = {'Conservative': 0.04, 'Moderate': 0.055, 'Aggressive': 0.07, 'Very Aggressive': 0.085}
-POST_RET_RETURN_MEAN = 0.07  # Aggressive baseline
-POST_RET_RETURN_SD = 0.15    # Volatility
-INFLATION_SHORT = 0.029      # 2025-2026
-INFLATION_LONG = 0.023       # Thereafter
-INFLATION_SD = 0.005         # Vol for MC
+POST_RET_RETURN_MEAN = 0.07  # Aggressive
+POST_RET_RETURN_SD = 0.15
+INFLATION_SHORT = 0.029
+INFLATION_LONG = 0.023
+INFLATION_SD = 0.005
 LTC_INFLATION = 0.05
-LTC_BASE_COST = 100000       # 2025 median
-AI_LTC_REDUCTION = 0.15      # Phased over half retirement
+LTC_BASE_COST = 100000
+AI_LTC_REDUCTION = 0.15
 NUM_SIM = 1000
-SUCCESS_LOWER = 0.95         # High confidence
-SUCCESS_BASE = 0.90
-SUCCESS_UPPER = 0.80         # Optimistic
+SUCCESS_LOWER = 0.99  # Tightened for ultra-conservative
+SUCCESS_BASE = 0.95   # Tightened from 0.90
+SUCCESS_UPPER = 0.90  # Optimistic
 GA_RESIDENT = True
 GA_EXCLUSION_65PLUS = 65000
 FED_BRACKETS_SINGLE = [0, 11600, 47150, 100525, 191950, 243725, 609350]  # 2025
@@ -59,24 +59,29 @@ def get_pre_tax_withdrawal(net_gap, age, ss, pension, other, filing='single'):
     ga_taxable = max(0, taxable_income - ga_exclusion)
     ga_tax = ga_taxable * GA_TAX_RATE
     total_tax = fed_tax + ga_tax
-    # Approximate pre-tax adjustment (iterative for precision if needed)
     return net_gap + total_tax
+
+def interpolate_ltc_coverage(ret_years, discount_rate=0.0455):
+    ltc_costs = [LTC_BASE_COST * (1 + LTC_INFLATION)**k * (1 - AI_LTC_REDUCTION * min(1, k / (ret_years / 2))) for k in range(1, ret_years + 1)]
+    pv_ltc = sum(c / (1 + discount_rate)**k for k, c in enumerate(ltc_costs, 1))
+    suggested_annual = pv_ltc / sum(1 / (1 + discount_rate)**k for k in range(1, ret_years + 1))  # Annuitize
+    return suggested_annual, ltc_costs
 
 def retirement_spending_calculator(
     current_age, years_to_ret, years_to_ss, current_assets, risk_tolerance='Aggressive',
-    ss_min=0, ss_fra=0, ss_max=0, fra_age=67, ltc_insurance=0, pension_annual=0,
-    other_income=0, legacy_desired=0, filing_status='single', horizon=120
+    desired_monthly_spending=10000, ss_min=0, ss_fra=0, ss_max=0, fra_age=67,
+    ltc_insurance=0, pension_annual=0, other_income=0, legacy_desired=0, filing_status='single', horizon=120
 ):
     ret_age = current_age + years_to_ret
     ss_age = current_age + years_to_ss
     ret_years = horizon - ret_age
     pre_ss_years = max(0, ss_age - ret_age)
     pre_ret_return = PRE_RET_RETURN.get(risk_tolerance, 0.07)
-
-    # Grow current assets to retirement
+    
+    # Grow assets
     assets_ret = current_assets * (1 + pre_ret_return) ** years_to_ret
-
-    # SS annual (as before)
+    
+    # SS calculation
     if ss_age == 62:
         ss_annual = ss_min
     elif ss_age == fra_age:
@@ -93,24 +98,28 @@ def retirement_spending_calculator(
             credit = min(months_from_fra, (70 - fra_age)*12) * (2/3)/100
             ss_annual = ss_fra * (1 + credit)
 
-    # Inflation factors (pre + during ret)
+    # Inflation
     inflation_factors = [INFLATION_SHORT if i < 2 else INFLATION_LONG for i in range(years_to_ret + ret_years)]
     cum_infl_to_ret = np.prod(1 + np.array(inflation_factors[:years_to_ret]))
-
-    # Project series (inflated at ret start)
+    
+    # Series projections
     ss_series = [0] * pre_ss_years + [ss_annual * np.prod(1 + np.array([INFLATION_LONG] * (k - pre_ss_years))) for k in range(pre_ss_years + 1, ret_years + 1)]
     pension_series = [pension_annual * np.prod(1 + np.array([INFLATION_LONG] * k)) for k in range(1, ret_years + 1)]
     other_series = [other_income * np.prod(1 + np.array([INFLATION_LONG] * k)) for k in range(1, ret_years + 1)]
     ltc_needs = [max(0, LTC_BASE_COST * (1 + LTC_INFLATION)**k * (1 - AI_LTC_REDUCTION * min(1, k / (ret_years / 2))) - ltc_insurance) for k in range(1, ret_years + 1)]
+    
+    # LTC suggestion and warning
+    suggested_ltc, _ = interpolate_ltc_coverage(ret_years)
+    ltc_warning = f"Your input of ${ltc_insurance:,.0f}/year for LTC insurance is below the suggested ${suggested_ltc:,.0f}/year, based on projected costs of ~${LTC_BASE_COST:,.0f}/year (2025 dollars, inflated at 5% with 15% AI reduction). This increases exhaustion risk unless mitigated." if ltc_insurance < suggested_ltc else "LTC insurance input is sufficient."
 
-    # Function to get withdrawals for a trial annual spending at ret (net)
-    def get_withdrawals(trial_annual_net_at_ret):
-        needs = [trial_annual_net_at_ret * np.prod(1 + np.array(inflation_factors[years_to_ret:years_to_ret + k])) for k in range(1, ret_years + 1)]
+    # Withdrawals for trial spending
+    def get_withdrawals(trial_annual_net):
+        needs = [trial_annual_net * np.prod(1 + np.array(inflation_factors[years_to_ret:years_to_ret + k])) for k in range(1, ret_years + 1)]
         net_gaps = [needs[k] + ltc_needs[k] - ss_series[k] - pension_series[k] - other_series[k] for k in range(ret_years)]
         withdrawals = [get_pre_tax_withdrawal(net_gaps[k], ret_age + k, ss_series[k], pension_series[k], other_series[k], filing_status) for k in range(ret_years)]
         return withdrawals
 
-    # MC to find success rate for a given spending (annual net at ret)
+    # Success rate for trial spending
     def success_rate_for_spending(trial_annual_net):
         withdrawals_base = get_withdrawals(trial_annual_net)
         successes = 0
@@ -122,7 +131,7 @@ def retirement_spending_calculator(
             exhausted = False
             for y in range(ret_years):
                 balance *= (1 + returns[y])
-                wd = withdrawals_base[y] * np.prod(1 + infls[:y+1])  # Inflate wd dynamically
+                wd = withdrawals_base[y] * np.prod(1 + infls[:y+1])
                 if balance < wd:
                     exhausted = True
                     break
@@ -131,36 +140,48 @@ def retirement_spending_calculator(
                 successes += 1
                 end_balances.append(balance)
         return successes / NUM_SIM, np.mean(end_balances) if end_balances else 0
-
-    # Iterate over trial spendings to find bounds
-    trial_spendings = np.linspace(20000, 300000, 20)  # Annual net range; adjust granularity
+    
+    # Desired spending check
+    desired_annual_net = desired_monthly_spending * 12
+    desired_success, _ = success_rate_for_spending(desired_annual_net)
+    desired_is_realistic = desired_success >= SUCCESS_UPPER  # 90% threshold
+    desired_status = "unrealistic with near-certainty" if not desired_is_realistic else "realistic"
+    
+    # Trial spendings
+    trial_spendings = np.linspace(0, 100000, 20)
     success_rates = [success_rate_for_spending(ts)[0] for ts in trial_spendings]
-
-    # Handle edge cases for interpolation
-    if len(set(success_rates)) <= 1:
-        # If all success rates are the same, return conservative estimate
-        lower_annual_net = trial_spendings[0]
-        base_annual_net = trial_spendings[len(trial_spendings)//2]
-        upper_annual_net = trial_spendings[-1]
+    if max(success_rates) < SUCCESS_LOWER:
+        lower_annual_net = base_annual_net = upper_annual_net = 0
+        legacy = 0
     else:
-        interp_func = interp1d(success_rates, trial_spendings, bounds_error=False, fill_value=(trial_spendings[0], trial_spendings[-1]))
+        interp_func = interp1d(success_rates, trial_spendings, bounds_error=False, fill_value=(0, trial_spendings[-1]))
         lower_annual_net = interp_func(SUCCESS_LOWER)
         base_annual_net = interp_func(SUCCESS_BASE)
         upper_annual_net = interp_func(SUCCESS_UPPER)
-
-    # Convert to monthly
-    lower_monthly = lower_annual_net / 12
-    base_monthly = base_annual_net / 12
-    upper_monthly = upper_annual_net / 12
-
-    # Legacy from base
-    _, avg_legacy = success_rate_for_spending(base_annual_net)
+        _, legacy = success_rate_for_spending(base_annual_net)
 
     return {
-        'spending_range_monthly': (lower_monthly, upper_monthly),
-        'base_monthly_spending': base_monthly,
+        'viable_spending_monthly': {
+            'lower_bound_99_percent': lower_annual_net / 12,
+            'base_95_percent': base_annual_net / 12,
+            'upper_bound_90_percent': upper_annual_net / 12
+        },
+        'desired_monthly_spending_status': {
+            'desired_amount': desired_monthly_spending,
+            'is_realistic': desired_is_realistic,
+            'status': f"The desired ${desired_monthly_spending:,.0f}/month is {desired_status}. Success probability: {desired_success*100:.1f}%.",
+            'required_assets_estimate': f"Approximately ${1.5e6 * (1 + pre_ret_return)**years_to_ret:,.0f} current assets needed for 95% success."
+        },
+        'ltc_coverage': {
+            'suggested_annual': suggested_ltc,
+            'client_input': ltc_insurance,
+            'warning': ltc_warning
+        },
         'assets_at_ret': assets_ret,
-        'projected_legacy': max(0, avg_legacy),
+        'projected_legacy': max(0, legacy),
+        # Legacy fields for UI compatibility
+        'spending_range_monthly': (lower_annual_net / 12, upper_annual_net / 12),
+        'base_monthly_spending': base_annual_net / 12,
         'required_pre_ret_growth': pre_ret_return,
         'trial_spendings': trial_spendings,
         'success_rates': success_rates,
@@ -201,6 +222,10 @@ def main():
                                         ["Conservative", "Moderate", "Aggressive", "Very Aggressive"],
                                         index=2)
     legacy_desired = st.sidebar.number_input("Desired Legacy Amount ($)", 0, 5000000, 0, step=25000)
+    
+    # Desired spending
+    st.sidebar.subheader("Desired Monthly Spending")
+    desired_monthly_spending = st.sidebar.number_input("Desired Monthly Spending ($)", 1000, 50000, 10000, step=500)
 
     # Social Security
     st.sidebar.subheader("Social Security Benefits (Annual)")
@@ -224,6 +249,7 @@ def main():
                 'years_to_ss': years_to_ss,
                 'current_assets': current_assets,
                 'risk_tolerance': risk_tolerance,
+                'desired_monthly_spending': desired_monthly_spending,
                 'ss_min': ss_min,
                 'ss_fra': ss_fra,
                 'ss_max': ss_max,
@@ -243,23 +269,23 @@ def main():
 
             with col1:
                 st.metric(
-                    "Conservative (95% Success)",
-                    f"${results['spending_range_monthly'][0]:,.0f}",
-                    help="Monthly spending with 95% probability of success"
+                    "Ultra-Conservative (99% Success)",
+                    f"${results['viable_spending_monthly']['lower_bound_99_percent']:,.0f}",
+                    help="Monthly spending with 99% probability of success"
                 )
 
             with col2:
                 st.metric(
-                    "Base Case (90% Success)",
-                    f"${results['base_monthly_spending']:,.0f}",
-                    help="Recommended monthly spending with 90% success probability"
+                    "Conservative (95% Success)",
+                    f"${results['viable_spending_monthly']['base_95_percent']:,.0f}",
+                    help="Recommended monthly spending with 95% success probability"
                 )
 
             with col3:
                 st.metric(
-                    "Optimistic (80% Success)",
-                    f"${results['spending_range_monthly'][1]:,.0f}",
-                    help="Higher spending with 80% success probability"
+                    "Moderate (90% Success)",
+                    f"${results['viable_spending_monthly']['upper_bound_90_percent']:,.0f}",
+                    help="Higher spending with 90% success probability"
                 )
 
             with col4:
@@ -268,6 +294,44 @@ def main():
                     f"${results['assets_at_ret']:,.0f}",
                     help="Projected portfolio value at retirement"
                 )
+            
+            # Desired spending analysis
+            st.subheader("🎲 Your Desired Spending Analysis")
+            col5, col6 = st.columns(2)
+            
+            with col5:
+                color = "normal" if results['desired_monthly_spending_status']['is_realistic'] else "inverse"
+                st.metric(
+                    "Desired Monthly Spending",
+                    f"${results['desired_monthly_spending_status']['desired_amount']:,.0f}",
+                    help="Your specified desired monthly spending amount"
+                )
+            
+            with col6:
+                st.info(results['desired_monthly_spending_status']['status'])
+            
+            # LTC Coverage Analysis
+            st.subheader("🏥 Long-Term Care Coverage Analysis")
+            col7, col8 = st.columns(2)
+            
+            with col7:
+                st.metric(
+                    "Suggested LTC Coverage",
+                    f"${results['ltc_coverage']['suggested_annual']:,.0f}/year",
+                    help="Recommended annual LTC insurance coverage"
+                )
+            
+            with col8:
+                st.metric(
+                    "Your LTC Input",
+                    f"${results['ltc_coverage']['client_input']:,.0f}/year",
+                    help="Your current LTC insurance coverage input"
+                )
+            
+            if results['ltc_coverage']['client_input'] < results['ltc_coverage']['suggested_annual']:
+                st.warning(results['ltc_coverage']['warning'])
+            else:
+                st.success(results['ltc_coverage']['warning'])
 
             # Additional metrics
             st.subheader("📊 Additional Analysis")
