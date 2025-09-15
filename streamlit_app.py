@@ -177,6 +177,19 @@ def retirement_spending_calculator(
     for k in range(1, ret_years + 1):
         inflated_spending = base_spending * np.prod(1 + np.array(inflation_factors[years_to_ret:years_to_ret + k]))
         annual_spending_needs.append(inflated_spending)
+    
+    # Calculate remaining portfolio balance over time
+    portfolio_balance_over_time = []
+    balance = assets_ret
+    for year in range(ret_years):
+        # Apply investment return (using mean return for projection)
+        balance *= (1 + POST_RET_RETURN_MEAN)
+        # Subtract withdrawal
+        if year < len(portfolio_withdrawals):
+            balance -= portfolio_withdrawals[year]
+        # Ensure balance doesn't go negative
+        balance = max(0, balance)
+        portfolio_balance_over_time.append(balance)
 
     return {
         'viable_spending_monthly': {
@@ -208,7 +221,8 @@ def retirement_spending_calculator(
         'ltc_needs': ltc_needs,
         'other_series': other_series,
         'portfolio_withdrawals': portfolio_withdrawals,
-        'annual_spending_needs': annual_spending_needs
+        'annual_spending_needs': annual_spending_needs,
+        'portfolio_balance_over_time': portfolio_balance_over_time
     }
 
 def main():
@@ -437,6 +451,7 @@ def main():
                     'Other Income': results['other_series'],
                     'Portfolio Withdrawals': results['portfolio_withdrawals'],
                     'Annual Spending Needs': results['annual_spending_needs'],
+                    'Portfolio Balance': results['portfolio_balance_over_time'],
                     'LTC Needs': results['ltc_needs']
                 })
 
@@ -484,6 +499,16 @@ def main():
                     line=dict(color='darkblue', width=3, dash='dot')
                 ))
 
+                # Add Portfolio Balance on secondary y-axis
+                fig_income.add_trace(go.Scatter(
+                    x=chart_data['Age'],
+                    y=chart_data['Portfolio Balance'],
+                    name='Portfolio Balance',
+                    mode='lines',
+                    line=dict(color='purple', width=4),
+                    yaxis='y2'
+                ))
+
                 # Add LTC needs as separate line
                 fig_income.add_trace(go.Scatter(
                     x=chart_data['Age'],
@@ -494,9 +519,15 @@ def main():
                 ))
 
                 fig_income.update_layout(
-                    title="Retirement Cash Flow Analysis: Income Sources vs. Spending Needs",
+                    title="Retirement Cash Flow Analysis: Income Sources vs. Spending Needs & Portfolio Balance",
                     xaxis_title="Age",
-                    yaxis_title="Annual Amount ($)",
+                    yaxis_title="Annual Cash Flow ($)",
+                    yaxis2=dict(
+                        title="Portfolio Balance ($)",
+                        overlaying='y',
+                        side='right',
+                        tickformat='$,.0f'
+                    ),
                     hovermode='x unified',
                     yaxis=dict(tickformat='$,.0f'),
                     height=500
