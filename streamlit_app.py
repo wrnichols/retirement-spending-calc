@@ -27,9 +27,9 @@ LTC_INFLATION = 0.05
 LTC_BASE_COST = 100000
 AI_LTC_REDUCTION = 0.15
 NUM_SIM = 1000
-SUCCESS_LOWER = 0.15  # Ultra-conservative - achievable with current MC
-SUCCESS_BASE = 0.10   # Conservative - practical with current MC
-SUCCESS_UPPER = 0.05  # Moderate - balanced with current MC
+SUCCESS_LOWER = 0.95  # Conservative - 95% success rate
+SUCCESS_BASE = 0.90   # Moderate - 90% success rate
+SUCCESS_UPPER = 0.80  # Aggressive - 80% success rate
 GA_RESIDENT = True
 GA_EXCLUSION_65PLUS = 65000
 FED_BRACKETS_SINGLE = [0, 11600, 47150, 100525, 191950, 243725, 609350]  # 2025
@@ -154,7 +154,7 @@ def retirement_spending_calculator(
     # Desired spending check
     desired_annual_net = desired_monthly_spending * 12
     desired_success, _ = success_rate_for_spending(desired_annual_net)
-    desired_is_realistic = desired_success >= SUCCESS_UPPER  # 65% threshold
+    desired_is_realistic = desired_success >= SUCCESS_UPPER  # 80% threshold
     desired_status = "unrealistic with near-certainty" if not desired_is_realistic else "realistic"
     
     # Trial spendings
@@ -352,23 +352,23 @@ def main():
 
             with col1:
                 st.metric(
-                    "Ultra-Conservative (15% Success)",
+                    "Conservative (95% Success)",
                     f"${results['viable_spending_monthly']['lower_bound_99_percent']:,.0f}",
-                    help="Monthly spending with 15% probability of success"
+                    help="Monthly spending with 95% probability of success"
                 )
 
             with col2:
                 st.metric(
-                    "Conservative (10% Success)",
+                    "Moderate (90% Success)",
                     f"${results['viable_spending_monthly']['base_95_percent']:,.0f}",
-                    help="Recommended monthly spending with 10% success probability"
+                    help="Recommended monthly spending with 90% success probability"
                 )
 
             with col3:
                 st.metric(
-                    "Moderate (5% Success)",
+                    "Aggressive (80% Success)",
                     f"${results['viable_spending_monthly']['upper_bound_90_percent']:,.0f}",
-                    help="Higher spending with 5% success probability"
+                    help="Higher spending with 80% success probability"
                 )
 
             with col4:
@@ -466,12 +466,12 @@ def main():
             ))
 
             # Add reference lines
-            fig_prob.add_hline(y=15, line_dash="dash", line_color="red",
-                              annotation_text="15% Ultra-Conservative")
-            fig_prob.add_hline(y=10, line_dash="dash", line_color="orange",
-                              annotation_text="10% Conservative")
-            fig_prob.add_hline(y=5, line_dash="dash", line_color="yellow",
-                              annotation_text="5% Moderate")
+            fig_prob.add_hline(y=95, line_dash="dash", line_color="red",
+                              annotation_text="95% Conservative")
+            fig_prob.add_hline(y=90, line_dash="dash", line_color="orange",
+                              annotation_text="90% Moderate")
+            fig_prob.add_hline(y=80, line_dash="dash", line_color="yellow",
+                              annotation_text="80% Aggressive")
 
             fig_prob.add_vline(x=results['base_monthly_spending'] * 12, line_dash="dot",
                               line_color="blue", annotation_text="Base Annual Spending")
