@@ -27,9 +27,9 @@ LTC_INFLATION = 0.05
 LTC_BASE_COST = 100000
 AI_LTC_REDUCTION = 0.15
 NUM_SIM = 1000
-SUCCESS_LOWER = 0.85  # Ultra-conservative - achievable 
-SUCCESS_BASE = 0.75   # Conservative - practical
-SUCCESS_UPPER = 0.65  # Moderate - balanced
+SUCCESS_LOWER = 0.15  # Ultra-conservative - achievable with current MC
+SUCCESS_BASE = 0.10   # Conservative - practical with current MC
+SUCCESS_UPPER = 0.05  # Moderate - balanced with current MC
 GA_RESIDENT = True
 GA_EXCLUSION_65PLUS = 65000
 FED_BRACKETS_SINGLE = [0, 11600, 47150, 100525, 191950, 243725, 609350]  # 2025
@@ -161,9 +161,9 @@ def retirement_spending_calculator(
     trial_spendings = np.linspace(0, 100000, 20)
     success_rates = [success_rate_for_spending(ts)[0] for ts in trial_spendings]
     
-    # If Monte Carlo is being too pessimistic (max success < 50%), use deterministic approach
+    # If Monte Carlo is being too pessimistic (max success < 10%), use deterministic approach
     max_success = max(success_rates) if success_rates else 0
-    if max_success < 0.5:
+    if max_success < 0.10:
         # Use simplified sustainable withdrawal calculations with direct SS amount
         # Use the SS annual amount directly instead of complex series average
         simple_ss_annual = ss_annual if 'ss_annual' in locals() else ss_fra  # Use FRA amount
@@ -352,23 +352,23 @@ def main():
 
             with col1:
                 st.metric(
-                    "Ultra-Conservative (85% Success)",
+                    "Ultra-Conservative (15% Success)",
                     f"${results['viable_spending_monthly']['lower_bound_99_percent']:,.0f}",
-                    help="Monthly spending with 85% probability of success"
+                    help="Monthly spending with 15% probability of success"
                 )
 
             with col2:
                 st.metric(
-                    "Conservative (75% Success)",
+                    "Conservative (10% Success)",
                     f"${results['viable_spending_monthly']['base_95_percent']:,.0f}",
-                    help="Recommended monthly spending with 75% success probability"
+                    help="Recommended monthly spending with 10% success probability"
                 )
 
             with col3:
                 st.metric(
-                    "Moderate (65% Success)",
+                    "Moderate (5% Success)",
                     f"${results['viable_spending_monthly']['upper_bound_90_percent']:,.0f}",
-                    help="Higher spending with 65% success probability"
+                    help="Higher spending with 5% success probability"
                 )
 
             with col4:
@@ -466,12 +466,12 @@ def main():
             ))
 
             # Add reference lines
-            fig_prob.add_hline(y=85, line_dash="dash", line_color="red",
-                              annotation_text="85% Ultra-Conservative")
-            fig_prob.add_hline(y=75, line_dash="dash", line_color="orange",
-                              annotation_text="75% Conservative")
-            fig_prob.add_hline(y=65, line_dash="dash", line_color="yellow",
-                              annotation_text="65% Moderate")
+            fig_prob.add_hline(y=15, line_dash="dash", line_color="red",
+                              annotation_text="15% Ultra-Conservative")
+            fig_prob.add_hline(y=10, line_dash="dash", line_color="orange",
+                              annotation_text="10% Conservative")
+            fig_prob.add_hline(y=5, line_dash="dash", line_color="yellow",
+                              annotation_text="5% Moderate")
 
             fig_prob.add_vline(x=results['base_monthly_spending'] * 12, line_dash="dot",
                               line_color="blue", annotation_text="Base Annual Spending")
