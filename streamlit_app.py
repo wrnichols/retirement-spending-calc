@@ -17,9 +17,9 @@ LTC_INFLATION = 0.05
 LTC_BASE_COST = 100000
 AI_LTC_REDUCTION = 0.15
 NUM_SIM = 1000
-SUCCESS_LOWER = 0.99  # Tightened for ultra-conservative
-SUCCESS_BASE = 0.95   # Tightened from 0.90
-SUCCESS_UPPER = 0.90  # Optimistic
+SUCCESS_LOWER = 0.85  # Ultra-conservative - achievable 
+SUCCESS_BASE = 0.75   # Conservative - practical
+SUCCESS_UPPER = 0.65  # Moderate - balanced
 GA_RESIDENT = True
 GA_EXCLUSION_65PLUS = 65000
 FED_BRACKETS_SINGLE = [0, 11600, 47150, 100525, 191950, 243725, 609350]  # 2025
@@ -131,7 +131,7 @@ def retirement_spending_calculator(
             exhausted = False
             for y in range(ret_years):
                 balance *= (1 + returns[y])
-                wd = withdrawals_base[y] * np.prod(1 + infls[:y+1])
+                wd = withdrawals_base[y]  # Withdrawals already include inflation
                 if balance < wd:
                     exhausted = True
                     break
@@ -152,7 +152,8 @@ def retirement_spending_calculator(
     success_rates = [success_rate_for_spending(ts)[0] for ts in trial_spendings]
     
     # If Monte Carlo is being too pessimistic (max success < 50%), use deterministic approach
-    if max(success_rates) < 0.5:
+    max_success = max(success_rates) if success_rates else 0
+    if max_success < 0.5:
         # Use simplified sustainable withdrawal calculations
         avg_ss = np.mean(ss_series) if ss_series else 0
         avg_pension = np.mean(pension_series) if pension_series else 0
@@ -173,8 +174,15 @@ def retirement_spending_calculator(
         base_annual_net = max(0, total_moderate)
         upper_annual_net = max(0, total_optimistic)
         
-        # Estimate legacy (simplified)
-        legacy = assets_ret * 0.3  # Rough estimate
+        # Calculate realistic legacy based on actual portfolio trajectory
+        temp_withdrawals = get_withdrawals(base_annual_net) if base_annual_net > 0 else [0] * ret_years
+        temp_balance = assets_ret
+        for year in range(ret_years):
+            temp_balance *= (1 + POST_RET_RETURN_MEAN)
+            if year < len(temp_withdrawals):
+                temp_balance -= min(temp_withdrawals[year], temp_balance)
+            temp_balance = max(0, temp_balance)
+        legacy = temp_balance
         portfolio_withdrawals = get_withdrawals(base_annual_net) if base_annual_net > 0 else [0] * ret_years
         
     else:
